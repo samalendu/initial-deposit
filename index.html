@@ -177,6 +177,8 @@
       grid-template-columns: 1fr 1fr;
       gap: 12px;
       flex: 1;
+      align-content: start;
+      align-items: start;
     }
 
     .card {
@@ -315,6 +317,35 @@
     }
     .detail-value a:hover { text-decoration: underline; }
 
+    /* ── SUMMARY BOX ── */
+    .summary-box {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-top: 28px;
+    }
+    .summary-cell {
+      background: var(--surface2);
+      border: 1px solid var(--accent-dim);
+      border-radius: var(--radius);
+      padding: 18px 14px 16px;
+      text-align: center;
+    }
+    .summary-cell-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+    }
+    .summary-cell-value {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--accent);
+      line-height: 1.2;
+    }
+
     /* responsive */
     @media (min-width: 500px) {
       .app { border-left: 1px solid var(--border); border-right: 1px solid var(--border); }
@@ -368,6 +399,7 @@
     <div class="detail-name" id="detail-name"></div>
     <div class="detail-branch" id="detail-branch"></div>
     <div class="detail-fields" id="detail-fields"></div>
+    <div class="summary-box" id="detail-summary"></div>
   </div>
 
 </div>
@@ -382,6 +414,9 @@ const SKIP_COLS = new Set(['transaction screenshot', 'timestamp']);
 const NAME_COL = 'name';
 const BRANCH_COL = 'branch';
 const AMOUNT_COL = 'initial deposit amount paid';
+const TOTAL_COL = 'total';
+const OUTSTANDING_COL = 'outstanding';
+const CURRENCY_COLS = new Set([AMOUNT_COL, TOTAL_COL, OUTSTANDING_COL]);
 
 function normalizeKey(k) {
   return String(k).trim().toLowerCase();
@@ -423,7 +458,7 @@ function renderList() {
       <div class="card" data-idx="${idx}" role="button" tabindex="0">
         ${branch ? `<div class="card-badge">${escHtml(branch)}</div>` : ''}
         <div class="card-name">${escHtml(name)}</div>
-        ${amount ? `<div class="card-amount">${escHtml(amount)}</div>` : ''}
+        ${amount ? `<div class="card-amount">${escHtml(formatCurrency(amount))}</div>` : ''}
       </div>`;
   }).join('');
 
@@ -480,26 +515,48 @@ function openDetail(idx) {
   const headers = Object.keys(row);
   const nameKey = findCol(headers, NAME_COL) || headers[1] || headers[0];
   const branchKey = findCol(headers, BRANCH_COL) || headers[2] || null;
+  const totalKey = findCol(headers, TOTAL_COL);
+  const outstandingKey = findCol(headers, OUTSTANDING_COL);
 
   document.getElementById('detail-name').textContent = row[nameKey] || '—';
   document.getElementById('detail-branch').textContent = branchKey ? (row[branchKey] || '') : '';
 
+  const summaryKeys = new Set([totalKey, outstandingKey].filter(Boolean));
+
   const fields = document.getElementById('detail-fields');
   fields.innerHTML = headers
-    .filter(k => k !== nameKey && k !== branchKey && !SKIP_COLS.has(normalizeKey(k)))
+    .filter(k => k !== nameKey && k !== branchKey && !SKIP_COLS.has(normalizeKey(k)) && !summaryKeys.has(k))
     .map(k => {
       const val = row[k];
       if (val === null || val === undefined || val === '') return '';
       const valStr = String(val);
       const isLink = valStr.startsWith('http');
+      const displayStr = CURRENCY_COLS.has(normalizeKey(k)) ? formatCurrency(valStr) : valStr;
       const valHtml = isLink
         ? `<a href="${escAttr(valStr)}" target="_blank" rel="noopener">View</a>`
-        : escHtml(valStr);
+        : escHtml(displayStr);
       return `<div class="detail-row">
         <span class="detail-label">${escHtml(k)}</span>
         <span class="detail-value">${valHtml}</span>
       </div>`;
     }).join('');
+
+  const summary = document.getElementById('detail-summary');
+  if (totalKey || outstandingKey) {
+    const totalVal = totalKey ? (row[totalKey] ?? '—') : '—';
+    const outVal = outstandingKey ? (row[outstandingKey] ?? '—') : '—';
+    summary.innerHTML = `
+      <div class="summary-cell">
+        <div class="summary-cell-label">Total</div>
+        <div class="summary-cell-value">${escHtml(formatCurrency(totalVal))}</div>
+      </div>
+      <div class="summary-cell">
+        <div class="summary-cell-label">Outstanding</div>
+        <div class="summary-cell-value">${escHtml(formatCurrency(outVal))}</div>
+      </div>`;
+  } else {
+    summary.innerHTML = '';
+  }
 
   showView('detail');
 }
@@ -510,6 +567,11 @@ function showView(view) {
   document.getElementById('loader').style.display = 'none';
   document.getElementById('file-picker').style.display = 'none';
   window.scrollTo(0, 0);
+}
+
+function formatCurrency(val) {
+  const s = String(val);
+  return s.startsWith('₹') ? s : '₹' + s;
 }
 
 function escHtml(s) {
